@@ -103,7 +103,7 @@ mod tests {
         let results = search(start, |&node| graph[node].clone(), |&node| node == goal);
         let path = results
             .path_to_goal()
-            .map(|path| path.into_iter().map(|&node| node).collect::<Vec<_>>());
+            .map(|path| path.into_iter().copied().collect::<Vec<_>>());
         let distance = results.goal_state().map(|s| s.distance);
         match expected {
             Some((expected_path, expected_distance)) => {

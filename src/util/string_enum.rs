@@ -26,7 +26,7 @@ macro_rules! string_enum {
         }
 
         impl std::str::FromStr for $name {
-            type Err = crate::util::string_enum::ParseEnumError;
+            type Err = $crate::util::string_enum::ParseEnumError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {

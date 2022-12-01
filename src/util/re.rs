@@ -24,7 +24,7 @@ pub fn parse_with_regex<T: MatchTuple>(re: &Regex, s: &str) -> Result<T, Box<dyn
             caps.len() - 1,
         ))?
     }
-    Ok(T::parse_captures(&caps)?)
+    T::parse_captures(&caps)
 }
 
 pub trait MatchTuple: Sized {

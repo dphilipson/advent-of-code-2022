@@ -59,7 +59,7 @@ impl<'a> LineInput<'a> {
     where
         T: MatchTuple,
     {
-        re::parse_with_regex(re, &self.0).unwrap()
+        re::parse_with_regex(re, self.0).unwrap()
     }
 }
 

@@ -28,7 +28,7 @@ where
         part: 1,
         solve: solve_part1,
         input: &input_text,
-        test_input: &test_input.text,
+        test_input: test_input.text,
         test_expected_output: test_input.part1_expected,
     });
     println!();
@@ -36,7 +36,7 @@ where
         part: 2,
         solve: solve_part2,
         input: &input_text,
-        test_input: &test_input.text,
+        test_input: test_input.text,
         test_expected_output: test_input.part2_expected,
     });
 }
