@@ -1,3 +1,17 @@
-Part 1 expected:
-Part 2 expected:
+Part 1 expected: 24000
+Part 2 expected: 45000
 
+1000
+2000
+3000
+
+4000
+
+5000
+6000
+
+7000
+8000
+9000
+
+10000
