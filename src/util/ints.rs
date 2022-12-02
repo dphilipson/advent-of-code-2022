@@ -1,20 +1,20 @@
-use crate::util::nums::Int;
+use crate::util::nums::{Int, Signed};
 
-pub fn gcd<T: Int>(a: T, b: T) -> T {
+pub fn gcd<T: Int + Signed>(a: T, b: T) -> T {
     let (x, y) = extended_euclidean(a, b);
     a * x + b * y
 }
 
 /// Returns the Bézout coefficients. That is, the returned (x, y) will satisfy
 /// > ax + by = gcd(a, b)
-pub fn extended_euclidean<T: Int>(a: T, b: T) -> (T, T) {
+pub fn extended_euclidean<T: Int + Signed>(a: T, b: T) -> (T, T) {
     if a < 0.into() {
-        let (x, y) = extended_euclidean(a.unsafe_negate(), b);
-        return (x.unsafe_negate(), y);
+        let (x, y) = extended_euclidean(-a, b);
+        return (-x, y);
     }
     if b < 0.into() {
-        let (x, y) = extended_euclidean(a, b.unsafe_negate());
-        return (x, y.unsafe_negate());
+        let (x, y) = extended_euclidean(a, -b);
+        return (x, -y);
     }
     let mut rs = (a, b);
     let mut ss: (T, T) = (1.into(), 0.into());
@@ -28,14 +28,14 @@ pub fn extended_euclidean<T: Int>(a: T, b: T) -> (T, T) {
     (ss.0, ts.0)
 }
 
-fn euclidean_step<T: Int>((old_x, x): (T, T), quotient: T) -> (T, T) {
+fn euclidean_step<T: Int + Signed>((old_x, x): (T, T), quotient: T) -> (T, T) {
     (x, old_x - quotient * x)
 }
 
 /// Solves a system of congruences, where each congruence is given in the form
 /// `(a, n)`, which represents `x = a (mod n)`. The result is given in the
 /// same format `(b, m)`, meaning the solution to the system is `x = b (mod m)`.
-pub fn solve_congruences<T: Int>(congruences: &[(T, T)]) -> Option<(T, T)> {
+pub fn solve_congruences<T: Int + Signed>(congruences: &[(T, T)]) -> Option<(T, T)> {
     let (&head, rest) = congruences.split_first()?;
     let mut acc = head;
     for &c in rest {
@@ -44,7 +44,7 @@ pub fn solve_congruences<T: Int>(congruences: &[(T, T)]) -> Option<(T, T)> {
     Some(acc)
 }
 
-fn solve_congruence_pair<T: Int>((a, n): (T, T), (b, m): (T, T)) -> Option<(T, T)> {
+fn solve_congruence_pair<T: Int + Signed>((a, n): (T, T), (b, m): (T, T)) -> Option<(T, T)> {
     let (x, y) = extended_euclidean(n, m);
     let gcd = n * x + m * y;
     let a_quotient = a / gcd;

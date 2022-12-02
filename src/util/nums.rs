@@ -79,9 +79,9 @@ impl<T> Num for T where
 {
 }
 
-pub trait Signed: Num + Neg {}
+pub trait Signed: Num + Neg<Output = Self> {}
 
-impl<T> Signed for T where T: Num + Neg {}
+impl<T> Signed for T where T: Num + Neg<Output = Self> {}
 
 pub trait Int: Num + Eq + Ord {}
 

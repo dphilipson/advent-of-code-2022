@@ -30,7 +30,7 @@ fn score_moves(their_move: u8, our_move: u8) -> u32 {
 }
 
 fn required_move(their_move: u8, desired_result: u8) -> u8 {
-    // Also cheeky. This is what you get if you set `desired_result` equal to
-    // the expression from the previous comment and solve for `our_move`.
+    // Also cheeky. This is what you get if you set `desired_result - 1` equal
+    // to the expression from the previous comment and solve for `our_move`.
     ((their_move + desired_result) % 3) + 1
 }
