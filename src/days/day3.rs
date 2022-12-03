@@ -4,47 +4,40 @@ use crate::harness::input::RawInput;
 
 pub fn solve_part1(input: RawInput) -> u32 {
     input
-        .per_line(|line| line.bytes())
-        .into_iter()
-        .map(process_line_for_part_1)
+        .as_str()
+        .lines()
+        .map(intersect_string_halves)
+        .map(priority)
         .sum()
 }
 
 pub fn solve_part2(input: RawInput) -> u32 {
-    let lines = input.per_line(|line| line.bytes());
-    let mut i = 0;
-    let mut sum = 0;
-    while i < lines.len() {
-        let cs1: HashSet<_> = lines[i].iter().copied().collect();
-        let cs2: HashSet<_> = lines[i + 1].iter().copied().collect();
-        let cs3: HashSet<_> = lines[i + 2].iter().copied().collect();
-        let cs12: HashSet<_> = cs1.intersection(&cs2).copied().collect();
-        let cs123: Vec<_> = cs12.intersection(&cs3).copied().collect();
-        assert_eq!(cs123.len(), 1, "Didn't find just one match.");
-        sum += priority(*cs123.first().unwrap());
-        i += 3
-    }
-    sum
+    input
+        .as_str()
+        .lines()
+        .collect::<Vec<_>>()
+        .chunks(3)
+        .map(intersect_strs)
+        .map(priority)
+        .sum()
 }
 
-fn process_line_for_part_1(cs: Vec<u8>) -> u32 {
-    let len = cs.len();
-    let first_half_set: HashSet<_> = cs.iter().take(len / 2).copied().collect();
-    let dupe = cs
-        .iter()
-        .skip(len / 2)
-        .find(|&x| first_half_set.contains(x))
-        .unwrap()
-        .to_owned();
-    priority(dupe)
+fn intersect_string_halves(s: &str) -> u8 {
+    let split_index = s.len() / 2;
+    intersect_strs(&[&s[..split_index], &s[split_index..]])
+}
+
+fn intersect_strs(strs: &[&str]) -> u8 {
+    let mut iter = strs.iter().map(|s| s.bytes().collect::<HashSet<_>>());
+    let first = iter.next().unwrap();
+    let intersection = iter.fold(first, |set1, set2| &set1 & &set2);
+    intersection.into_iter().next().unwrap()
 }
 
 fn priority(c: u8) -> u32 {
-    if (b'a'..=b'z').contains(&c) {
+    if c.is_ascii_lowercase() {
         (c - b'a' + 1) as u32
-    } else if (b'A'..=b'Z').contains(&c) {
-        (c - b'A' + 27) as u32
     } else {
-        panic!("Invalid char {c}")
+        (c - b'A' + 27) as u32
     }
 }
