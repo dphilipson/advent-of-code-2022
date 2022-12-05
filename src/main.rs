@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+extern crate core;
+
 mod days;
 mod harness;
 mod util;

@@ -1,84 +1,112 @@
 use crate::harness::input::RawInput;
 use crate::regex;
-use crate::util::re::parse_with_regex;
+use crate::util::re;
+use std::error;
+use std::str::FromStr;
 
 pub fn solve_part1(input: RawInput) -> String {
-    let (mut crates, moves) = parse_input(input);
-    for muve in moves {
-        apply_move(&mut crates, muve)
+    let Input { mut crates, moves } = input.as_str().parse().unwrap();
+    for moove in moves {
+        crates.apply_part1_move(moove);
     }
-    crates.into_iter()
-        .map(|crait| *crait.last().unwrap() as char)
-        .collect()
+    crates.read_top_crates()
 }
 
 pub fn solve_part2(input: RawInput) -> String {
-    let (mut crates, moves) = parse_input(input);
-    for muve in moves {
-        apply_big_move(&mut crates, muve)
+    let Input { mut crates, moves } = input.as_str().parse().unwrap();
+    for moove in moves {
+        crates.apply_part2_move(moove);
     }
-    crates.into_iter()
-        .map(|crait| *crait.last().unwrap() as char)
-        .collect()
+    crates.read_top_crates()
 }
 
-fn parse_input(input: RawInput) -> (Vec<Vec<u8>>, Vec<(usize, usize, usize)>) {
-    let groups: Vec<_> = input.grouped_lines(|line| line.single::<String>()).collect();
-    let crates = parse_crates(&groups[0]);
-    let moves = parse_moves(&groups[1]);
-    (crates, moves)
+#[derive(Debug)]
+struct Input {
+    crates: Crates,
+    moves: Vec<Move>,
 }
 
-fn parse_crates(input:&[String]) -> Vec<Vec<u8>> {
-    let crate_rows: Vec<_> = input[..input.len() - 1]
-        .into_iter()
-        .map(|row| parse_crate_row(&row))
-        .collect();
-    let ncols = crate_rows.last().unwrap().len();
-    let mut result: Vec<Vec<u8>> = (0..ncols).map(|_| Vec::new()).collect();
-    for row in crate_rows.into_iter().rev() {
-        for (i, char) in row {
-            result[i].push(char)
+impl FromStr for Input {
+    type Err = Box<dyn error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (crates_str, moves_str) = s.split_once("\n\n").ok_or("Could not split.")?;
+        let crates = crates_str.parse()?;
+        let mut moves = vec![];
+        for line in moves_str.lines() {
+            moves.push(line.parse()?);
+        }
+        Ok(Self { crates, moves })
+    }
+}
+
+#[derive(Debug)]
+struct Crates(Vec<Vec<u8>>);
+
+impl FromStr for Crates {
+    type Err = Box<dyn error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let rows: Vec<_> = s.lines().rev().skip(1).map(parse_crate_row).collect();
+        let ncols = rows.first().unwrap().len();
+        let mut result = vec![Vec::new(); ncols];
+        for row in rows {
+            for (i, char) in row {
+                result[i].push(char)
+            }
+        }
+        Ok(Self(result))
+    }
+}
+
+impl Crates {
+    fn apply_part1_move(&mut self, Move { count, start, end }: Move) {
+        for _ in 0..count {
+            let crait = self.0[start].pop().unwrap();
+            self.0[end].push(crait);
         }
     }
-    result
+
+    fn apply_part2_move(&mut self, Move { count, start, end }: Move) {
+        let start_col = &mut self.0[start];
+        let crates = start_col.split_off(start_col.len() - count);
+        self.0[end].extend(crates);
+    }
+
+    fn read_top_crates(&self) -> String {
+        self.0
+            .iter()
+            .map(|stack| *stack.last().unwrap() as char)
+            .collect()
+    }
 }
 
-fn parse_moves(input: &[String]) -> Vec<(usize, usize, usize)> {
-    input.iter()
-        .map(|s|
-            parse_with_regex::<(usize, usize, usize)>(
-                regex!(r"move (\d+) from (\d+) to (\d+)"),
-                s
-            ).unwrap())
-        .collect()
+#[derive(Debug, Copy, Clone)]
+struct Move {
+    count: usize,
+    start: usize,
+    end: usize,
+}
+
+impl FromStr for Move {
+    type Err = Box<dyn error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (count, start, end): (usize, usize, usize) =
+            re::parse_with_regex(regex!(r"^move (\d+) from (\d+) to (\d+)$"), s)?;
+        Ok(Self {
+            count,
+            start: start - 1,
+            end: end - 1,
+        })
+    }
 }
 
 fn parse_crate_row(s: &str) -> Vec<(usize, u8)> {
-    let bytes = s.as_bytes();
-    let mut i = 1;
-    let mut result = vec![];
-    while i <= bytes.len() {
-        if bytes[i] != b' ' {
-            result.push((i / 4, bytes[i]))
-        }
-        i += 4;
-    }
-    result
-}
-
-fn apply_move(crates: &mut Vec<Vec<u8>>, (count, start, end): (usize, usize, usize)) {
-    for _ in 0..count {
-        let crait = crates[start - 1].pop().unwrap();
-        crates[end - 1].push(crait);
-    }
-}
-
-fn apply_big_move(crates: &mut Vec<Vec<u8>>, (count, start, end): (usize, usize, usize)) {
-    let start_col = &crates[start - 1];
-    let aagh = &start_col[start_col.len() - count..].to_owned();
-    for _ in 0..count {
-        crates[start - 1].pop();
-    }
-    crates[end - 1].extend(aagh);
+    s.bytes()
+        .skip(1)
+        .step_by(4)
+        .enumerate()
+        .filter(|&(_, b)| b != b' ')
+        .collect()
 }
