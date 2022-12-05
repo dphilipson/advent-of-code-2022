@@ -83,21 +83,20 @@ impl<'a> RawInput<'a> {
         f(LineInput(line))
     }
 
-    pub fn per_line<F, T>(&self, f: F) -> Vec<T>
+    pub fn per_line<F, T>(&self, f: F) -> impl Iterator<Item = T> + 'a
     where
-        F: Fn(LineInput) -> T,
+        F: Fn(LineInput) -> T + 'static,
     {
-        self.0.lines().map(|line| f(LineInput(line))).collect()
+        self.0.lines().map(move |line| f(LineInput(line)))
     }
 
-    pub fn grouped_lines<F, T>(&self, f: F) -> Vec<Vec<T>>
+    pub fn grouped_lines<F, T>(&self, f: F) -> impl Iterator<Item = Vec<T>> + 'a
     where
-        F: Fn(LineInput) -> T,
+        F: Fn(LineInput) -> T + 'static,
     {
         self.0
             .split("\n\n")
-            .map(|group| group.lines().map(|line| f(LineInput(line))).collect())
-            .collect()
+            .map(move |group| group.lines().map(|line| f(LineInput(line))).collect())
     }
 
     pub fn raw_str(&self) -> &str {

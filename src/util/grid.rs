@@ -94,8 +94,8 @@ impl<T> Grid<T> {
     }
 }
 
-fn parse_grid<T: Default>(input: &str, f: impl Fn(LineInput) -> Vec<T>) -> Grid<T> {
-    let values = RawInput::new(input).per_line(f);
+fn parse_grid<T: Default>(input: &str, f: impl Fn(LineInput) -> Vec<T> + 'static) -> Grid<T> {
+    let values: Vec<_> = RawInput::new(input).per_line(f).collect();
     let n_rows = values.len();
     let n_cols = values[0].len();
     let mut result = Array2::default((n_rows, n_cols));

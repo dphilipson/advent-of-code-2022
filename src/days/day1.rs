@@ -10,9 +10,8 @@ pub fn solve_part2(input: RawInput) -> u32 {
     sums.into_iter().rev().take(3).sum()
 }
 
-fn parse_sums(input: RawInput) -> impl Iterator<Item = u32> {
+fn parse_sums(input: RawInput) -> impl Iterator<Item = u32> + '_ {
     input
         .grouped_lines(|line| line.single::<u32>())
-        .into_iter()
         .map(|group| group.into_iter().sum())
 }

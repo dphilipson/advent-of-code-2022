@@ -3,7 +3,6 @@ use crate::harness::input::{LineInput, RawInput};
 pub fn solve_part1(input: RawInput) -> u32 {
     input
         .per_line(parse_to_values)
-        .into_iter()
         .map(|(their_move, our_move)| score_moves(their_move, our_move))
         .sum()
 }
@@ -11,7 +10,6 @@ pub fn solve_part1(input: RawInput) -> u32 {
 pub fn solve_part2(input: RawInput) -> u32 {
     input
         .per_line(parse_to_values)
-        .into_iter()
         .map(|(their_move, desired_result)| {
             score_moves(their_move, required_move(their_move, desired_result))
         })
