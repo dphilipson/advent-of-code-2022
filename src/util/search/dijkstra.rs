@@ -22,7 +22,7 @@ where
         let mut seen_states = Vec::<TempSeenState<S>>::new();
         let initial_state = Rc::new(initial_state);
         tracked_states.push(TrackedState {
-            state: initial_state.clone(),
+            state: Rc::clone(&initial_state),
             distance: 0,
             prev_index: None,
             seen_index: None,
@@ -44,7 +44,7 @@ where
                 continue;
             }
             seen_states.push(TempSeenState {
-                state: state.clone(),
+                state: Rc::clone(&state),
                 distance,
                 prev_index: prev_index.map(|i| tracked_states[i].seen_index.unwrap()),
             });
@@ -68,7 +68,7 @@ where
                     }
                 } else {
                     tracked_states.push(TrackedState {
-                        state: next_state.clone(),
+                        state: Rc::clone(&next_state),
                         distance: next_distance,
                         prev_index: Some(index),
                         seen_index: None,
@@ -115,7 +115,7 @@ struct TrackedState<S> {
 impl<S> Clone for TrackedState<S> {
     fn clone(&self) -> Self {
         TrackedState {
-            state: self.state.clone(),
+            state: Rc::clone(&self.state),
             distance: self.distance,
             prev_index: self.prev_index,
             seen_index: self.seen_index,

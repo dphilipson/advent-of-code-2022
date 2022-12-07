@@ -11,7 +11,7 @@ where
 {
     let old_hook = Arc::new(Mutex::new(Some(panic::take_hook())));
     panic::set_hook({
-        let old_hook = old_hook.clone();
+        let old_hook = Arc::clone(&old_hook);
         Box::new(move |info| {
             if !is_todo(info.payload()) {
                 if let Some(hook) = &*old_hook.lock().unwrap() {

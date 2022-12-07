@@ -33,7 +33,7 @@ where
                 reached_goal = true;
                 break;
             }
-            seen_set.insert(state.state.clone());
+            seen_set.insert(Rc::clone(&state.state));
             let TempState {
                 state, distance, ..
             } = state;
@@ -78,7 +78,7 @@ struct TempState<S> {
 impl<S> Clone for TempState<S> {
     fn clone(&self) -> Self {
         TempState {
-            state: self.state.clone(),
+            state: Rc::clone(&self.state),
             distance: self.distance,
             prev_index: self.prev_index,
         }
