@@ -1,131 +1,48 @@
-use std::cmp;
 use crate::harness::input::RawInput;
-use crate::regex;
-use crate::util::re::parse_with_regex;
+use serde_json::Value;
+use std::cmp;
 use std::cmp::Ordering;
-use std::str::FromStr;
-use Packet::{List, Number};
+use Value::{Array, Number};
 
 pub fn solve_part1(input: RawInput) -> usize {
-   input.grouped_lines(|line| line.single::<Packet>())
-       .enumerate()
-       .filter(|(_, pair)| pair[0] < pair[1])
-       .map(|(i, _)| {
-           i + 1
-       })
-       .sum()
+    input
+        .grouped_lines(|line| serde_json::from_str::<Value>(line.as_str()).unwrap())
+        .enumerate()
+        .filter(|(_, pair)| cmp_values(&pair[0], &pair[1]) == Ordering::Less)
+        .map(|(i, _)| i + 1)
+        .sum()
 }
 
 pub fn solve_part2(input: RawInput) -> usize {
-    let mut packets: Vec<_> = input.as_str()
+    let mut packets: Vec<Value> = input
+        .as_str()
         .lines()
         .filter(|line| !line.is_empty())
-        .map(|line| line.parse::<Packet>().unwrap())
+        .map(|line| serde_json::from_str(line).unwrap())
         .collect();
-    let sep1 = List(vec![List(vec![Number(2)])]);
-    let sep2 = List(vec![List(vec![Number(6)])]);
-    packets.push(sep1);
-    packets.push(sep2);
-    packets.sort();
-    let sep1 = List(vec![List(vec![Number(2)])]);
-    let sep2 = List(vec![List(vec![Number(6)])]);
-    let i1 = packets.iter().position(|p| p.clone() == sep1).unwrap();
-    let i2 = packets.iter().position(|p| p.clone() == sep2).unwrap();
-    (i1 + 1) * (i2 + 1)
+    let sep1: Value = serde_json::from_str("[[2]]").unwrap();
+    let sep2: Value = serde_json::from_str("[[6]]").unwrap();
+    packets.extend([sep1.clone(), sep2.clone()]);
+    packets.sort_by(cmp_values);
+    let i1 = packets.iter().position(|p| p == &sep1).unwrap() + 1;
+    let i2 = packets.iter().position(|p| p == &sep2).unwrap() + 1;
+    i1 * i2
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-enum Packet {
-    Number(u8),
-    List(Vec<Packet>),
-}
-
-impl FromStr for Packet {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(read_item(s).0)
-        // println!("Before: {s}");
-        // let bytes = s.as_bytes();
-        // if bytes[0] == b'[' {
-        //     let inner = std::str::from_utf8(&bytes[1..bytes.len() - 1]).unwrap();
-        //     if inner.is_empty() {
-        //         return Ok(List(vec![]));
-        //     }
-        //     let mut parts = vec![];
-        //     let mut start = 0;
-        //     let mut end = 0;
-        //     while end < inner.len() {
-        //
-        //     }
-        //     let list = inner.split(',').map(|part| part.parse().unwrap()).collect();
-        //     Ok(List(list))
-        // } else {
-        //     println!("{s}");
-        //     Ok(Number(s.parse().unwrap()))
-        // }
-    }
-}
-
-fn read_item(s: &str) -> (Packet, String) {
-    if let Some((n, remaining)) = read_number(s) {
-        return (Number(n), remaining)
-    }
-    let mut i = 0;
-    let mut bracket_count = 0;
-    let bytes = s.as_bytes();
-    loop {
-        match bytes[i] {
-            b'[' => bracket_count += 1,
-            b']' => {
-                bracket_count -= 1;
-                if bracket_count == 0 {
-                    break;
+fn cmp_values(v1: &Value, v2: &Value) -> Ordering {
+    match (v1, v2) {
+        (Number(n1), Number(n2)) => n1.as_u64().cmp(&n2.as_u64()),
+        (Number(_), Array(_)) => cmp_values(&Array(vec![v1.clone()]), v2),
+        (Array(_), Number(_)) => cmp_values(v2, v1).reverse(),
+        (Array(list1), Array(list2)) => {
+            for i in 0..cmp::min(list1.len(), list2.len()) {
+                let ord = cmp_values(&list1[i], &list2[i]);
+                if ord != Ordering::Equal {
+                    return ord;
                 }
-            },
-            _ => ()
+            }
+            list1.len().cmp(&list2.len())
         }
-        i += 1;
-    }
-    let mut inner = std::str::from_utf8(&bytes[1..i]).unwrap().to_owned();
-    let mut items = vec![];
-    while !inner.is_empty() {
-        let (part, remaining) = read_item(&inner);
-        items.push(part);
-        inner = remaining.trim_start_matches(',').to_owned();
-    }
-    (List(items), std::str::from_utf8(&bytes[i+1..]).unwrap().to_owned())
-}
-
-fn read_number(s: &str) -> Option<(u8, String)> {
-    return parse_with_regex::<(u8, String)>(regex!(r"^(\d+)(.*)$"), s).ok()
-}
-
-impl PartialOrd<Self> for Packet {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Packet {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self {
-            Number(n1) => match other {
-                Number(n2) => n1.cmp(n2),
-                List(_) => List(vec![Number(*n1)]).cmp(other),
-            },
-            List(list1) => match other {
-                Number(_) => other.cmp(self).reverse(),
-                List(list2) => {
-                    for i in 0..cmp::min(list1.len(), list2.len()) {
-                        let ord = list1[i].cmp(&list2[i]);
-                        if ord != Ordering::Equal {
-                            return ord;
-                        }
-                    }
-                    list1.len().cmp(&list2.len())
-                }
-            },
-        }
+        _ => panic!(),
     }
 }
