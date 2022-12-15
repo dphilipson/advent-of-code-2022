@@ -38,6 +38,14 @@ pub trait Num:
         }
     }
 
+    fn abs_diff(self, other: Self) -> Self {
+        if self >= other {
+            self - other
+        } else {
+            other - self
+        }
+    }
+
     /// Like `%` or `.rem()` except it always returns a non-negative result even
     /// if one or both of the inputs are negative.
     fn modulus(self, rhs: Self) -> Self {

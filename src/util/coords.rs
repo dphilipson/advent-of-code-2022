@@ -66,6 +66,10 @@ macro_rules! coord_impls {
             pub fn manhattan_norm(self) -> T {
                 T::default() $(+ self.$field.abs())*
             }
+
+            pub fn manhattan_distance(self, other: Self) -> T {
+                T::default() $(+ self.$field.abs_diff(other.$field))*
+            }
         }
 
         impl<T: Num> Mul<T> for $name<T> {
@@ -167,10 +171,13 @@ mod tests {
         assert_eq!(neighbors_set, neighbors_expected);
         let neighbors_set: HashSet<_> = c.orthogonal_neighbors().into_iter().collect();
         let neighbors_expected: HashSet<_> =
-            [Coord2(0, -3), Coord2(0, -1), Coord2(2, -3), Coord2(2, -1)]
+            [Coord2(1, -3), Coord2(1, -1), Coord2(0, -2), Coord2(2, -2)]
                 .into_iter()
                 .collect();
         assert_eq!(neighbors_set, neighbors_expected);
+        let c1 = Coord2(2_u32, 2_u32);
+        let c2 = Coord2(1_u32, 3_u32);
+        assert_eq!(c1.manhattan_distance(c2), 2);
     }
 
     #[test]
