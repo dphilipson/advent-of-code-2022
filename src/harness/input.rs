@@ -57,7 +57,7 @@ impl<'a> LineInput<'a> {
 
     pub fn parse_with_regex<T>(&self, re: &Regex) -> T
     where
-        T: MatchTuple,
+        T: MatchTuple<'a>,
     {
         re::parse_with_regex(re, self.0).unwrap()
     }

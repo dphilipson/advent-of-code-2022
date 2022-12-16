@@ -1,6 +1,6 @@
 use crate::harness::input::RawInput;
 use crate::regex;
-use crate::util::re::parse_with_regex;
+use crate::util::re::{parse_with_regex, Str};
 use std::collections::VecDeque;
 use std::error;
 use std::str::FromStr;
@@ -79,10 +79,10 @@ impl FromStr for Monkey {
     If true: throw to monkey (\d+)
     If false: throw to monkey (\d+)"
         );
-        let (items, op_char, op_value, test_factor, true_target, false_target): (
-            String,
+        let (Str(items), op_char, Str(op_value), test_factor, true_target, false_target): (
+            Str,
             char,
-            String,
+            Str,
             u64,
             usize,
             usize,
