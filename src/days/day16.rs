@@ -85,10 +85,7 @@ pub fn solve_part2(input: RawInput) -> u32 {
     for k in 0..labels.len() {
         for i in 0..labels.len() {
             for j in 0..labels.len() {
-                dists[[i, j]] = cmp::min(
-                    dists[[i, j]],
-                    dists[[i, k]] + dists[[k, j]]
-                );
+                dists[[i, j]] = cmp::min(dists[[i, j]], dists[[i, k]] + dists[[k, j]]);
             }
         }
     }
@@ -104,20 +101,27 @@ pub fn solve_part2(input: RawInput) -> u32 {
             index_for_label(useful_labels[label_idx2]),
         ]]
     };
-    let useful_flow_rates = useful_labels.iter()
+    let useful_flow_rates = useful_labels
+        .iter()
         .map(|label| valves_by_label.get(label).unwrap().flow_rate)
         .collect::<Vec<_>>();
-    let get_pressure_gain = |bitset: usize| {
-        let mut sum = 0;
-        for i in 0..useful_labels.len() {
-            if bitset & (1 << i) != 0 {
-                sum += useful_flow_rates[i];
-            }
-        }
-        sum
-    };
-    let mut bests: Array3<Option<u32>> =
-        Array3::from_elem((max_time + 1, useful_labels.len(), 1 << useful_labels.len()), None);
+    let pressure_gains_by_subset: Vec<_> = (0..1 << useful_labels.len())
+        .map(|bitset| {
+            (0..useful_labels.len())
+                .map(|i| {
+                    if bitset & (1 << i) > 0 {
+                        useful_flow_rates[i]
+                    } else {
+                        0
+                    }
+                })
+                .sum::<u32>()
+        })
+        .collect();
+    let mut bests: Array3<Option<u32>> = Array3::from_elem(
+        (max_time + 1, useful_labels.len(), 1 << useful_labels.len()),
+        None,
+    );
     bests[[0, 0, 1]] = Some(0);
     for time in 1..=max_time {
         for label in 0..useful_labels.len() {
@@ -128,7 +132,7 @@ pub fn solve_part2(input: RawInput) -> u32 {
                 let mut best = None;
                 if time > 0 {
                     if let Some(idle_prev) = bests[[time - 1, label, bitset]] {
-                        best = Some(idle_prev + get_pressure_gain(bitset));
+                        best = Some(idle_prev + pressure_gains_by_subset[bitset]);
                     }
                 }
                 for label2 in 0..useful_labels.len() {
@@ -146,7 +150,10 @@ pub fn solve_part2(input: RawInput) -> u32 {
                     if let Some(prev_best) = bests[[time - time_diff, label2, prev_bitset]] {
                         best = cmp::max(
                             best,
-                            Some(prev_best + get_pressure_gain(prev_bitset) * time_diff as u32),
+                            Some(
+                                prev_best
+                                    + pressure_gains_by_subset[prev_bitset] * time_diff as u32,
+                            ),
                         );
                     }
                 }
@@ -154,19 +161,17 @@ pub fn solve_part2(input: RawInput) -> u32 {
             }
         }
     }
-    // let mut best = None;
-    // for location in 0..useful_labels.len() {
-    //     for bitmap in 0..(1 << useful_labels.len()) {
-    //         best = cmp::max(best, bests[[max_time, location, bitmap]])
-    //     }
-    // }
     let best_by_subset: Vec<_> = (0..1 << useful_labels.len())
-        .map(|bitset| (0..useful_labels.len()).map(|label| bests[[max_time, label, bitset]]).max().unwrap())
+        .map(|bitset| {
+            (0..useful_labels.len())
+                .map(|label| bests[[max_time, label, bitset]])
+                .max()
+                .unwrap()
+        })
         .collect();
-
     let mut best = None;
     for subset in 0..1 << useful_labels.len() {
-        for subset2 in 0..1 << useful_labels.len() {
+        for subset2 in subset + 1..1 << useful_labels.len() {
             if subset & subset2 != 1 {
                 continue;
             }
@@ -178,23 +183,6 @@ pub fn solve_part2(input: RawInput) -> u32 {
         }
     }
     best.unwrap()
-
-    // let mut best_by_state = HashMap::<State, u32>::new();
-    // let mut pending = BinaryHeap::new();
-    // pending.push(State {
-    //     location: [b'A', b'A'],
-    //     open_valves: vec![],
-    //     pressure: 0,
-    //     pressure_rate: 0,
-    //     time: 0,
-    // });
-    // while let Some(state) = pending.pop() {}
-    // The best at a given state is either:
-    // from standing still:
-    // the best at same valves, same location, time - 1, + pressure_rate
-    // from traveling from X:
-    // the the best at location X, same valves minus this one, time - travel_time - 1, + pressure_rate * (travel_time + 1)
-    // so if we always go in order of time, we should be good.
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
