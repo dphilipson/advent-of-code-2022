@@ -6,12 +6,9 @@ use std::str::FromStr;
 /// Converts a string literal into a Regex, caching the value in a static variable for reuse.
 #[macro_export]
 macro_rules! regex {
-    ($str:literal) => {{
-        lazy_static::lazy_static! {
-            static ref RE: regex::Regex = regex::Regex::new($str).unwrap();
-        }
-        let result: &regex::Regex = &RE;
-        result
+    ($re:literal $(,)?) => {{
+        static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
+        RE.get_or_init(|| regex::Regex::new($re).unwrap())
     }};
 }
 
