@@ -2,22 +2,23 @@ use crate::harness::input::RawInput;
 use crate::regex;
 use crate::util::re;
 use ndarray::{Array2, Array3};
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::str::FromStr;
 use std::{cmp, error};
 
+// This code is basically unreadable. Don't expect a good solution ahead.
+
 pub fn solve_part1(input: RawInput) -> u32 {
-    todo!();
     let valves_by_label = parse_valves(input);
     let mut best_by_state = HashMap::<State, (u32, u32)>::new();
-    let mut pending = vec![State {
+    let mut pending = VecDeque::from([State {
         location: [b'A', b'A'],
         open_valves: vec![],
         pressure: 0,
         pressure_rate: 0,
         time: 0,
-    }];
-    while let Some(state) = pending.pop() {
+    }]);
+    while let Some(state) = pending.pop_front() {
         if let Some(&(best_time, best_pressure)) = best_by_state.get(&state) {
             if state.time >= best_time
                 && state.pressure <= best_pressure + (state.time - best_time) * state.pressure_rate
@@ -39,7 +40,7 @@ pub fn solve_part1(input: RawInput) -> u32 {
             let mut open_valves = state.open_valves.clone();
             open_valves.push(state.location);
             open_valves.sort();
-            pending.push(State {
+            pending.push_back(State {
                 location: state.location,
                 open_valves,
                 pressure: next_pressure,
@@ -48,7 +49,7 @@ pub fn solve_part1(input: RawInput) -> u32 {
             });
         }
         for &next_location in &current_location.connections {
-            pending.push(State {
+            pending.push_back(State {
                 location: next_location,
                 open_valves: state.open_valves.clone(),
                 pressure: next_pressure,
