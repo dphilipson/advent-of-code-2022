@@ -1,124 +1,126 @@
-use std::error;
-use std::str::FromStr;
 use crate::harness::input::RawInput;
 use crate::regex;
 use crate::util::re;
-use crate::util::search::bfs;
+use std::cmp;
 
-pub fn solve_part1(input: RawInput) -> usize {
-    input.per_line(|line| line.single::<Blueprint>())
+pub fn solve_part1(input: RawInput) -> u32 {
+    input
+        .per_line(|line| parse_blueprint_costs(line.as_str()))
         .enumerate()
-        .map(|(i, blueprint)| {
-            let geodes = get_max_geodes(&blueprint, 5);
-            println!("Part 1: {i} -> {geodes}");
-            (i + 1) * geodes
-        })
+        .map(|(i, costs)| (i as u32 + 1) * get_max_geodes(costs, 24))
         .sum()
 }
 
-pub fn solve_part2(input: RawInput) -> usize {
-    input.per_line(|line| line.single::<Blueprint>())
+pub fn solve_part2(input: RawInput) -> u32 {
+    input
+        .per_line(|line| parse_blueprint_costs(line.as_str()))
         .take(3)
-        .enumerate()
-        .map(|(i, blueprint)| {
-            println!("{i}");
-            get_max_geodes(&blueprint, 32)
-        })
+        .map(|costs| get_max_geodes(costs, 32))
         .product()
 }
 
-fn get_max_geodes(blueprint: &Blueprint, time_limit: usize) -> usize {
-    let search_result = bfs::search(
-        State { time: 0, robot_counts: [1, 0, 0, 0], resource_counts: [0; 4], declined_builds: [false; 4]},
-        |state| {
-            if state.time == time_limit {
-                return vec![];
+fn get_max_geodes(costs: [[u32; 4]; 4], time_limit: u32) -> u32 {
+    let max_robots = get_max_robots(costs);
+    let mut pending = vec![State {
+        time: 0,
+        robots: [1, 0, 0, 0],
+        resources: [0; 4],
+    }];
+    let mut best_geodes = 0;
+    while let Some(state) = pending.pop() {
+        if state.get_best_possible_geodes(time_limit) <= best_geodes {
+            continue;
+        }
+        // Consider building a robot of each type. Try the more advanced robots
+        // first so that we get branches with more geodes sooner so they can be
+        // used to prune other branches.
+        for robot_type in (0..4).rev() {
+            if state.robots[robot_type] == max_robots[robot_type] {
+                continue;
             }
-            let mut max_costs = [0; 4];
-            for i in 0..4 {
-                max_costs[i] = (0..4).map(|j| blueprint.0[j][i]).max().unwrap();
-            }
-            let mut out = vec![];
-            let mut resource_counts = state.resource_counts;
-            for i in 0..4 {
-                resource_counts[i] += state.robot_counts[i];
-            }
-            let mut declined_builds = state.declined_builds;
-            for resource in 0..4 {
-                if resource < 3 && state.robot_counts[resource] == max_costs[resource] {
-                    // Don't build if already as many robots as highest cost.
+            if let Some(wait_time) = state.get_wait_time(costs[robot_type]) {
+                let time = state.time + wait_time;
+                if time > time_limit {
                     continue;
                 }
-                // Consider building a robot of type `resource`.
-                if state.declined_builds[resource] {
-                    // We already skipped building this. Doesn't make sense to build it now.
-                    continue;
+                let mut robots = state.robots;
+                robots[robot_type] += 1;
+                let mut resources = state.resources;
+                for i in 0..4 {
+                    resources[i] += wait_time * state.robots[i];
+                    resources[i] -= costs[robot_type][i]
                 }
-                let costs = blueprint.0[resource];
-                if (0..4).all(|i| state.resource_counts[i] >= costs[i]) {
-                    // We can afford to build a resource i.
-                    let mut robot_counts = state.robot_counts;
-                    robot_counts[resource] += 1;
-                    let mut resource_counts = resource_counts;
-                    for i in 0..4 {
-                        resource_counts[i] -= costs[i];
-                    }
-                    out.push(State {
-                        time: state.time + 1,
-                        robot_counts,
-                        resource_counts,
-                        declined_builds: [false; 4]
-                    });
-                    declined_builds[resource] = true;
-                }
+                pending.push(State {
+                    time,
+                    robots,
+                    resources,
+                });
+                best_geodes = cmp::max(best_geodes, resources[3] + robots[3] * (time_limit - time));
             }
-            out.push(State {
-                time: state.time + 1,
-                robot_counts: state.robot_counts,
-                resource_counts,
-                declined_builds,
-            });
-            out
-        },
-        |_| false
-    );
-    search_result.seen_states.iter()
-        .map(|state| state.state.resource_counts[3])
-        .max()
-        .unwrap()
+        }
+    }
+    best_geodes
 }
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+fn get_max_robots(costs: [[u32; 4]; 4]) -> [u32; 4] {
+    let mut out = [0; 4];
+    for i in 0..3 {
+        out[i] = (0..4).map(|j| costs[j][i]).max().unwrap();
+    }
+    out[3] = u32::MAX;
+    out
+}
+
+#[derive(Copy, Clone, Debug)]
 struct State {
-    time: usize,
-    robot_counts: [usize; 4],
-    resource_counts: [usize; 4],
-    declined_builds: [bool; 4],
+    time: u32,
+    robots: [u32; 4],
+    resources: [u32; 4],
 }
 
+impl State {
+    fn get_wait_time(self, costs: [u32; 4]) -> Option<u32> {
+        let mut wait_time = 0;
+        for i in 0..4 {
+            let missing = costs[i].saturating_sub(self.resources[i]);
+            if missing == 0 {
+                continue;
+            }
+            if self.robots[i] == 0 {
+                return None;
+            }
+            wait_time = cmp::max(wait_time, div_round_up(missing, self.robots[i]));
+        }
+        Some(wait_time + 1)
+    }
 
-/// Blueprint.0[i] is costs to build i robot.
-/// So Blueprint.0[i][j] is how much j needed to build i robot.
-#[derive(Debug)]
-struct Blueprint([[usize; 4]; 4]);
+    fn get_best_possible_geodes(self, time_limit: u32) -> u32 {
+        let remaining_time = time_limit - self.time;
+        self.resources[3]
+            + self.robots[3] * remaining_time
+            + remaining_time * (remaining_time + 1) / 2
+    }
+}
 
-impl FromStr for Blueprint {
-    type Err = Box<dyn error::Error>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (ore_for_ore, ore_for_clay, ore_for_obsidian, clay_for_obsidian, ore_for_geode, obsidian_for_geode) : (usize, usize, usize, usize, usize, usize) = re::parse_with_regex(
-            regex!(
+/// Returns an array of costs, where `costs[i][j]` is the amount of resource `j`
+/// required to build a robot of type `i`.
+fn parse_blueprint_costs(s: &str) -> [[u32; 4]; 4] {
+    let (ore_for_ore, ore_for_clay, ore_for_obsidian, clay_for_obsidian, ore_for_geode, obsidian_for_geode) : (u32, u32, u32, u32, u32, u32) = re::parse_with_regex(
+        regex!(
                 r"^Blueprint \d+: Each ore robot costs (\d+) ore. Each clay robot costs (\d+) ore. Each obsidian robot costs (\d+) ore and (\d+) clay. Each geode robot costs (\d+) ore and (\d+) obsidian.$"
             ),
-            s
-        )?;
-        let mut out: [[usize; 4]; 4] = Default::default();
-        out[0][0] = ore_for_ore;
-        out[1][0] = ore_for_clay;
-        out[2][0] = ore_for_obsidian;
-        out[2][1] = clay_for_obsidian;
-        out[3][0] = ore_for_geode;
-        out[3][2] = obsidian_for_geode;
-        Ok(Self(out))
-    }
+        s
+    ).unwrap();
+    let mut out: [[u32; 4]; 4] = Default::default();
+    out[0][0] = ore_for_ore;
+    out[1][0] = ore_for_clay;
+    out[2][0] = ore_for_obsidian;
+    out[2][1] = clay_for_obsidian;
+    out[3][0] = ore_for_geode;
+    out[3][2] = obsidian_for_geode;
+    out
+}
+
+fn div_round_up(a: u32, b: u32) -> u32 {
+    (a + b - 1) / b
 }
