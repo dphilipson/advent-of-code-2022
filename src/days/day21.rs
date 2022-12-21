@@ -6,94 +6,71 @@ use std::str::FromStr;
 
 pub fn solve_part1(input: RawInput) -> i64 {
     let monkeys: Vec<_> = input.per_line(|line| line.single::<Monkey>()).collect();
-    compute_monkey_values(&monkeys)["root"]
+    solve(&monkeys, "root")
 }
 
 pub fn solve_part2(input: RawInput) -> i64 {
-    let monkeys: Vec<_> = input
-        .per_line(|line| line.single::<Monkey>())
-        .filter(|monkey| &monkey.label != "humn")
-        .collect();
-    let &root_monkey = monkeys
-        .iter()
-        .find(|&monkey| &monkey.label == "root")
-        .unwrap();
-    if let Action::Combine(_, label1, label2) = root_monkey.action {
-        let values_by_label = compute_monkey_values(&monkeys);
-        let updated_monkeys: Vec<_> = monkeys
-            .iter()
-            .map(|&monkey| {
-                if let Some(&value) = values_by_label.get(&monkey.label) {
-                    Monkey {
-                        label: monkey.label,
-                        action: Action::Yell(value),
-                    }
-                } else {
-                    monkey
-                }
-            })
-            .collect();
-        if let Some(&value) = values_by_label.get(&label1) {
-            return solve_inverse(&updated_monkeys, &label2, value);
-        } else if let Some(&value) = values_by_label.get(&label2) {
-            return solve_inverse(&updated_monkeys, &label1, value);
-        }
-    } else {
-        panic!("Couldn't match root.");
-    }
-    panic!("Couldn't solve either side.");
+    let monkeys = get_part2_monkeys(input);
+    solve(&monkeys, "humn")
 }
 
-fn compute_monkey_values(monkeys: &[Monkey]) -> HashMap<Label, i64> {
-    let mut monkeys_by_child: HashMap<_, _> = monkeys
-        .iter()
-        .map(|monkey| (monkey.label, ArrayVec::<Monkey, 3>::new()))
-        .collect();
-    for &monkey in monkeys {
-        if let Action::Combine(_, label1, label2) = monkey.action {
-            for label in [label1, label2] {
-                if let Some(vec) = monkeys_by_child.get_mut(&label) {
-                    vec.push(monkey);
+fn get_part2_monkeys(input: RawInput) -> Vec<Monkey> {
+    let mut monkeys = vec![];
+    for monkey in input.per_line(|line| line.single::<Monkey>()) {
+        match monkey.label.as_str() {
+            "root" => {
+                if let Action::Combine(_, label1, label2) = monkey.action {
+                    monkeys.extend([
+                        Monkey::new(label1, Action::Watch(label2)),
+                        Monkey::new(label2, Action::Watch(label1)),
+                    ]);
+                } else {
+                    panic!("Root monkey was not watching other monkeys.");
                 }
             }
+            "humn" => (),
+            _ => {
+                monkeys.push(monkey);
+                monkeys.extend(monkey.inverses());
+            }
+        }
+    }
+    monkeys
+}
+
+fn solve(monkeys: &[Monkey], root: &str) -> i64 {
+    let mut monkeys_by_child = HashMap::<Label, ArrayVec<Monkey, 4>>::new();
+    for &monkey in monkeys {
+        match monkey.action {
+            Action::Combine(_, label1, label2) => {
+                for label in [label1, label2] {
+                    monkeys_by_child.entry(label).or_default().push(monkey);
+                }
+            }
+            Action::Watch(label) => {
+                monkeys_by_child.entry(label).or_default().push(monkey);
+            }
+            _ => (),
         }
     }
     let mut values_by_label = HashMap::<Label, i64>::new();
     let mut pending: Vec<_> = monkeys
         .iter()
-        .filter(|&&monkey| match monkey.action {
-            Action::Yell(_) => true,
-            Action::Combine(_, _, _) => false,
-        })
+        .filter(|&&monkey| matches!(monkey.action, Action::Yell(_)))
         .collect();
     while let Some(&monkey) = pending.pop() {
         if values_by_label.contains_key(&monkey.label) {
-            continue; // May not be necessary.
+            continue;
         }
         if let Some(value) = monkey.action.evaluate(&values_by_label) {
+            if &monkey.label == root {
+                return value;
+            }
             values_by_label.insert(monkey.label, value);
             pending.extend(&monkeys_by_child[&monkey.label]);
         }
     }
-    values_by_label
-}
-
-fn solve_inverse(monkeys: &[Monkey], root: &str, root_value: i64) -> i64 {
-    let inverse_monkeys: Vec<_> = monkeys
-        .iter()
-        .flat_map(|monkey| monkey.inverses())
-        .map(|monkey| {
-            if &monkey.label == root {
-                Monkey {
-                    label: Label::from(root).unwrap(),
-                    action: Action::Yell(root_value),
-                }
-            } else {
-                monkey
-            }
-        })
-        .collect();
-    compute_monkey_values(&inverse_monkeys)["humn"]
+    panic!("Could not evaluate root.");
 }
 
 type Label = ArrayString<4>;
@@ -111,56 +88,37 @@ impl FromStr for Monkey {
         let (label, action) = s.split_once(": ").ok_or("No colon")?;
         let label: Label = label.parse()?;
         let action: Action = action.parse()?;
-        Ok(Self { label, action })
+        Ok(Self::new(label, action))
     }
 }
 
 impl Monkey {
-    fn inverses(self) -> ArrayVec<Self, 2> {
+    fn new(label: Label, action: Action) -> Self {
+        Self { label, action }
+    }
+
+    fn inverses(self) -> ArrayVec<Monkey, 2> {
         match self.action {
-            Action::Yell(_) => ArrayVec::from_iter([self]),
+            Action::Yell(_) => ArrayVec::new(),
             Action::Combine(op, label1, label2) => ArrayVec::from(match op {
                 Op::Add => [
-                    Self {
-                        label: label1,
-                        action: Action::Combine(Op::Sub, self.label, label2),
-                    },
-                    Self {
-                        label: label2,
-                        action: Action::Combine(Op::Sub, self.label, label1),
-                    },
+                    Self::new(label1, Action::Combine(Op::Sub, self.label, label2)),
+                    Self::new(label2, Action::Combine(Op::Sub, self.label, label1)),
                 ],
                 Op::Sub => [
-                    Self {
-                        label: label1,
-                        action: Action::Combine(Op::Add, self.label, label2),
-                    },
-                    Self {
-                        label: label2,
-                        action: Action::Combine(Op::Sub, label1, self.label),
-                    },
+                    Self::new(label1, Action::Combine(Op::Add, self.label, label2)),
+                    Self::new(label2, Action::Combine(Op::Sub, label1, self.label)),
                 ],
                 Op::Mul => [
-                    Self {
-                        label: label1,
-                        action: Action::Combine(Op::Div, self.label, label2),
-                    },
-                    Self {
-                        label: label2,
-                        action: Action::Combine(Op::Div, self.label, label1),
-                    },
+                    Self::new(label1, Action::Combine(Op::Div, self.label, label2)),
+                    Self::new(label2, Action::Combine(Op::Div, self.label, label1)),
                 ],
                 Op::Div => [
-                    Self {
-                        label: label1,
-                        action: Action::Combine(Op::Mul, self.label, label2),
-                    },
-                    Self {
-                        label: label2,
-                        action: Action::Combine(Op::Div, label1, self.label),
-                    },
+                    Self::new(label1, Action::Combine(Op::Mul, self.label, label2)),
+                    Self::new(label2, Action::Combine(Op::Div, label1, self.label)),
                 ],
             }),
+            Action::Watch(_) => ArrayVec::new(),
         }
     }
 }
@@ -169,6 +127,7 @@ impl Monkey {
 enum Action {
     Yell(i64),
     Combine(Op, Label, Label),
+    Watch(Label),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -217,14 +176,12 @@ impl Action {
     fn evaluate(self, values_by_label: &HashMap<Label, i64>) -> Option<i64> {
         match self {
             Self::Yell(value) => Some(value),
-            Self::Combine(op, label1, label2) => {
-                if let Some(&v1) = values_by_label.get(&label1) {
-                    if let Some(&v2) = values_by_label.get(&label2) {
-                        return Some(op.apply(v1, v2));
-                    }
-                }
-                None
-            }
+            Self::Combine(op, label1, label2) => values_by_label.get(&label1).and_then(|&value1| {
+                values_by_label
+                    .get(&label2)
+                    .map(|&value2| op.apply(value1, value2))
+            }),
+            Self::Watch(label) => values_by_label.get(&label).copied(),
         }
     }
 }
