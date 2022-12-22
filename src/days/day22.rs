@@ -1,91 +1,138 @@
-use ndarray::Array2;
 use crate::harness::input::RawInput;
 use crate::regex;
+use ndarray::Array2;
+use Direction::{Down, Left, Right, Up};
+use Move::{Forward, TurnLeft, TurnRight};
+use Tile::{Blocked, Open, Warp};
 
-// Extreme mess ahead. Don't expect quality.
+static PORTALS: [Portal; 7] = [
+    Portal::new(Edge::new([0, 1], Up), Edge::new([3, 0], Left), false),
+    Portal::new(Edge::new([0, 2], Up), Edge::new([3, 0], Down), false),
+    Portal::new(Edge::new([0, 2], Right), Edge::new([2, 1], Right), true),
+    Portal::new(Edge::new([0, 2], Down), Edge::new([1, 1], Right), false),
+    Portal::new(Edge::new([2, 1], Down), Edge::new([3, 0], Right), false),
+    Portal::new(Edge::new([2, 0], Left), Edge::new([0, 1], Left), true),
+    Portal::new(Edge::new([2, 0], Up), Edge::new([1, 1], Left), false),
+];
+
+const EDGE_LENGTH: usize = 50;
+
 
 pub fn solve_part1(input: RawInput) -> usize {
-    todo!();
-    let (board, moves) = parse(input);
-    let mut state = State::new(board);
-    for moove in moves {
-        state.apply_move(moove);
-    }
-    1000 * state.position[0] + 4 * state.position[1] + state.facing.score()
-
+    solve(input, false)
 }
 
 pub fn solve_part2(input: RawInput) -> usize {
+    solve(input, true)
+}
+
+fn solve(input: RawInput, is_part2: bool) -> usize {
     let (board, moves) = parse(input);
-    let mut state = State::new(board);
+    let mut state = State::new(board, is_part2);
     for moove in moves {
         state.apply_move(moove);
     }
-    println!("position: {:?}, facing: {:?}", state.position, state.facing);
-    1000 * state.position[0] + 4 * state.position[1] + state.facing.score()
+    state.position.score()
 }
 
 #[derive(Debug)]
 struct State {
     board: Array2<Tile>,
-    position: [usize; 2],
-    facing: Direction,
+    position: Position,
+    is_part_2: bool,
 }
 
 impl State {
-    fn new(board: Array2<Tile>) -> Self {
+    fn new(board: Array2<Tile>, is_part_2: bool) -> Self {
         Self {
             position: get_start_position(&board),
             board,
-            facing: Direction::Right
+            is_part_2,
         }
     }
 
     fn apply_move(&mut self, moove: Move) {
         match moove {
-            Move::Forward(n) => {
-              for _ in 0..n {
-                  self.move_foward_once_part2();
-              }
-            },
-            Move::TurnLeft => self.facing = self.facing.left(),
-            Move::TurnRight => self.facing = self.facing.right(),
+            Forward(n) => {
+                for _ in 0..n {
+                    self.move_foward_once();
+                }
+            }
+            TurnLeft => self.position.facing = self.position.facing.left(),
+            TurnRight => self.position.facing = self.position.facing.right(),
         }
     }
 
     fn move_foward_once(&mut self) {
-        let mut position = self.facing.move_from(self.position);
-        position = match self.board[position] {
-            Tile::Open => position,
-            Tile::Blocked => self.position,
-            Tile::Warp => {
-                let [i, j] = self.position;
-                position = match self.facing {
-                    Direction::Right => [i, 0],
-                    Direction::Up => [self.board.nrows() - 1, j],
-                    Direction::Left => [i, self.board.ncols() - 1],
-                    Direction::Down => [0, j],
-                };
-                while self.board[position] == Tile::Warp {
-                    position = self.facing.move_from(position);
-                }
-                if self.board[position] == Tile::Open { position } else { self.position }
-            }
+        let mut position = self.position.forward();
+        if self.board[position.location] == Warp {
+            position = self.warp(position);
+        }
+        self.position = match self.board[position.location] {
+            Open => position,
+            Blocked => self.position,
+            Warp => panic!("shouldn't be on warp after warping"),
         };
-        self.position = position
     }
 
-    fn move_foward_once_part2(&mut self) {
-        let mut position = self.facing.move_from(self.position);
-        position = match self.board[position] {
-            Tile::Open => position,
-            Tile::Blocked => self.position,
-            Tile::Warp => {
-                let (facing, position) = warp(self.facing, position);
-                if self.board[position] == Tile::Open { self.facing = facing; position } else { self.position }
-            }
+    fn warp(&self, position: Position) -> Position {
+        if self.is_part_2 {
+            return position.warp_with_portals();
+        }
+        let [i, j] = position.location;
+        let location = match position.facing {
+            Right => [i, (0..).position(|j| self.board[[i, j]] != Warp).unwrap()],
+            Down => [(0..).position(|i| self.board[[i, j]] != Warp).unwrap(), j],
+            Left => [
+                i,
+                (0..self.board.ncols())
+                    .rposition(|j| self.board[[i, j]] != Warp)
+                    .unwrap(),
+            ],
+            Up => [
+                (0..self.board.nrows())
+                    .rposition(|i| self.board[[i, j]] != Warp)
+                    .unwrap(),
+                j,
+            ],
         };
-        self.position = position
+        Position::new(location, position.facing)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Position {
+    location: [usize; 2],
+    facing: Direction,
+}
+
+impl Position {
+    fn new(location: [usize; 2], facing: Direction) -> Self {
+        Self { location, facing }
+    }
+
+    fn forward(self) -> Self {
+        let [i, j] = self.location;
+        let location = match self.facing {
+            Right => [i, j + 1],
+            Down => [i + 1, j],
+            Left => [i, j - 1],
+            Up => [i - 1, j],
+        };
+        Self { location, ..self }
+    }
+
+    fn warp_with_portals(self) -> Self {
+        PORTALS
+            .iter()
+            .filter_map(|portal| portal.try_warp(self))
+            .next()
+            .expect("should find matching portal")
+    }
+
+    fn score(self) -> usize {
+        let [i, j] = self.location;
+        1000 * i + 4 * j + self.facing.score()
     }
 }
 
@@ -93,52 +140,42 @@ impl State {
 enum Tile {
     Open,
     Blocked,
-    Warp
+    Warp,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum Direction {
     Right,
-    Up,
-    Left,
     Down,
+    Left,
+    Up,
 }
 
 impl Direction {
-    fn left(self) -> Self {
-        match self {
-            Direction::Right => Direction::Up,
-            Direction::Up => Direction::Left,
-            Direction::Left => Direction::Down,
-            Direction::Down => Direction::Right,
-        }
-    }
-
     fn right(self) -> Self {
-        match self {
-            Direction::Right => Direction::Down,
-            Direction::Up => Direction::Right,
-            Direction::Left => Direction::Up,
-            Direction::Down => Direction::Left,
-        }
+        Self::from_ordinal(self as u8 + 1)
     }
 
-    fn move_from(self, [x, y]: [usize; 2]) -> [usize; 2] {
-        match self {
-            Direction::Right => [x, y + 1],
-            Direction::Up => [x - 1, y],
-            Direction::Left => [x, y - 1],
-            Direction::Down => [x + 1, y],
+    fn reverse(self) -> Self {
+        Self::from_ordinal(self as u8 + 2)
+    }
+
+    fn left(self) -> Self {
+        Self::from_ordinal(self as u8 + 3)
+    }
+
+    fn from_ordinal(n: u8) -> Self {
+        match n % 4 {
+            0 => Right,
+            1 => Down,
+            2 => Left,
+            3 => Up,
+            _ => panic!(),
         }
     }
 
     fn score(self) -> usize {
-        match self {
-            Direction::Right => 0,
-            Direction::Up => 3,
-            Direction::Left => 2,
-            Direction::Down => 1,
-        }
+        self as usize
     }
 }
 
@@ -149,18 +186,106 @@ enum Move {
     TurnRight,
 }
 
+#[derive(Debug, Copy, Clone)]
+struct Portal {
+    edge1: Edge,
+    edge2: Edge,
+    causes_flip: bool,
+}
+
+impl Portal {
+    const fn new(edge1: Edge, edge2: Edge, causes_flip: bool) -> Self {
+        Self {
+            edge1,
+            edge2,
+            causes_flip,
+        }
+    }
+
+    fn try_warp(self, position: Position) -> Option<Position> {
+        if let Some(mut distance) = self.edge1.distance_along_edge(position) {
+            if self.causes_flip {
+                distance = EDGE_LENGTH - 1 - distance;
+            }
+            Some(self.edge2.position_along_edge(distance))
+        } else if let Some(mut distance) = self.edge2.distance_along_edge(position) {
+            if self.causes_flip {
+                distance = EDGE_LENGTH - 1 - distance;
+            }
+            Some(self.edge1.position_along_edge(distance))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Edge {
+    sector: [usize; 2],
+    facing: Direction,
+}
+
+impl Edge {
+    const fn new(sector: [usize; 2], facing: Direction) -> Self {
+        Self { sector, facing }
+    }
+
+    fn distance_along_edge(self, position: Position) -> Option<usize> {
+        if position.facing != self.facing {
+            return None;
+        }
+        let [i, j] = position.location;
+        match self.facing {
+            Right => Some(i.wrapping_sub(self.min_i()))
+                .filter(|&d| d < EDGE_LENGTH && j == self.max_j() + 1),
+            Down => Some(j.wrapping_sub(self.min_j()))
+                .filter(|&d| d < EDGE_LENGTH && i == self.max_i() + 1),
+            Left => Some(i.wrapping_sub(self.min_i()))
+                .filter(|&d| d < EDGE_LENGTH && j == self.min_j() - 1),
+            Up => Some(j.wrapping_sub(self.min_j()))
+                .filter(|&d| d < EDGE_LENGTH && i == self.min_i() - 1),
+        }
+    }
+
+    fn position_along_edge(self, distance: usize) -> Position {
+        let location = match self.facing {
+            Right => [self.min_i() + distance, self.max_j()],
+            Down => [self.max_i(), self.min_j() + distance],
+            Left => [self.min_i() + distance, self.min_j()],
+            Up => [self.min_i(), self.min_j() + distance],
+        };
+        Position::new(location, self.facing.reverse())
+    }
+
+    fn min_i(self) -> usize {
+        self.sector[0] * EDGE_LENGTH + 1
+    }
+
+    fn min_j(self) -> usize {
+        self.sector[1] * EDGE_LENGTH + 1
+    }
+
+    fn max_i(self) -> usize {
+        self.min_i() + EDGE_LENGTH - 1
+    }
+
+    fn max_j(self) -> usize {
+        self.min_j() + EDGE_LENGTH - 1
+    }
+}
+
 fn parse_board(s: &str) -> Array2<Tile> {
     let lines: Vec<_> = s.lines().map(|s| s.as_bytes()).collect();
     let width = lines.iter().map(|line| line.len()).max().unwrap();
     let height = lines.len();
-    let mut out = Array2::from_elem((height + 2, width + 2), Tile::Warp);
+    let mut out = Array2::from_elem((height + 2, width + 2), Warp);
     for i in 0..height {
         for j in 0..width {
             if let Some(b) = lines[i].get(j) {
                 out[[i + 1, j + 1]] = match b {
-                    b'.' => Tile::Open,
-                    b'#' => Tile::Blocked,
-                    b' ' => Tile::Warp,
+                    b'.' => Open,
+                    b'#' => Blocked,
+                    b' ' => Warp,
                     _ => panic!(),
                 };
             }
@@ -170,13 +295,15 @@ fn parse_board(s: &str) -> Array2<Tile> {
 }
 
 fn parse_moves(s: &str) -> Vec<Move> {
-    let numbers: Vec<_> = regex!(r"[RL]").split(s)
-        .map(|s| Move::Forward(s.parse().unwrap()))
+    let numbers: Vec<_> = regex!(r"[RL]")
+        .split(s)
+        .map(|s| Forward(s.parse().unwrap()))
         .collect();
-    let turns: Vec<_> = regex!(r"\d+").split(s)
+    let turns: Vec<_> = regex!(r"\d+")
+        .split(s)
         .filter_map(|s| match s {
-            "L" => Some(Move::TurnLeft),
-            "R" => Some(Move::TurnRight),
+            "L" => Some(TurnLeft),
+            "R" => Some(TurnRight),
             _ => None,
         })
         .collect();
@@ -189,157 +316,17 @@ fn parse_moves(s: &str) -> Vec<Move> {
 }
 
 fn parse(input: RawInput) -> (Array2<Tile>, Vec<Move>) {
-    let (board, moves) = input.as_str().trim_end()
-        .split_once("\n\n").unwrap();
+    let (board, moves) = input.as_str().trim_end().split_once("\n\n").unwrap();
     let board = parse_board(board);
     let moves = parse_moves(moves);
     (board, moves)
 }
 
-fn get_start_position(board: &Array2<Tile>) -> [usize; 2] {
+fn get_start_position(board: &Array2<Tile>) -> Position {
     for j in 0..board.ncols() {
-        if board[[1, j]] == Tile::Open {
-            return [1, j];
+        if board[[1, j]] == Open {
+            return Position::new([1, j], Right);
         }
     }
     panic!("couldn't find start")
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Edge {
-    start: [usize; 2],
-    is_horizontal: bool,
-    destination_index: usize,
-    flip_while_warping: bool,
-}
-
-// fn get_edges() -> Vec<Edge> {
-//     vec![
-//         Edge { // D
-//             start: [0, 51],
-//             is_horizontal: true,
-//             destination_index: todo!(),
-//             flip_while_warping: false,
-//         },
-//         Edge { // C
-//             start: [0, 101],
-//             is_horizontal: true,
-//             destination_index: todo!(),
-//             flip_while_warping: false,
-//         },
-//         Edge { // F
-//             start: [100, 1],
-//             is_horizontal: true,
-//             destination_index: todo!(),
-//             flip_while_warping: false,
-//         },
-//         Edge { // B
-//             start: [51, 101],
-//             is_horizontal: true,
-//             destination_index: todo!(),
-//             flip_while_warping: false,
-//         },
-//         Edge { // G
-//             start: [151, 51],
-//             is_horizontal: true,
-//             destination_index: todo!(),
-//             flip_while_warping: false,
-//         },
-//         Edge { // C
-//             start: [201, 1],
-//             is_horizontal: true,
-//             destination_index: todo!(),
-//             flip_while_warping: false,
-//         },
-//     ]
-// }
-
-fn warp(facing: Direction, [i, j]: [usize; 2]) ->(Direction, [usize; 2]) {
-    match facing {
-        Direction::Right => {
-            if j == 151 {
-                if i < 51 {
-                    (Direction::Left, [(51 - i) + 100, 100]) // A
-                } else {
-                    panic!("Why here??");
-                }
-            } else if j == 101 {
-                if (51..=100).contains(&i) {
-                    (Direction::Up, [50, i + 50]) // B
-                } else if (101..=150).contains(&i) {
-                    (Direction::Left, [51 - (i - 100), 150]) // A
-                } else {
-                    panic!("Shouldn't be here");
-                }
-            } else if j == 51 {
-                if i > 150 {
-                    (Direction::Up, [150, i - 100]) // G
-                } else {
-                    panic!("whyyyy");
-                }
-            } else {
-                panic!("This is bad too")
-            }
-        }
-        Direction::Up => {
-            if i == 0 {
-                if j < 51 {
-                    panic!("How here?");
-                } else if j < 101 {
-                    (Direction::Right, [j + 100, 1]) // D
-                } else {
-                    (Direction::Up, [200, j - 100]) // C
-                }
-            } else if i == 100 {
-                if j < 51 {
-                    (Direction::Right, [j + 50, 51]) // F
-                } else {
-                    panic!("How here? 2");
-                }
-            } else {
-                panic!("Up in weird spot");
-            }
-        }
-        Direction::Left => {
-            if j == 0 {
-                if i < 101 {
-                    panic!("noooo");
-                } else if i < 151 {
-                    (Direction::Right, [51 - (i - 100), 51]) // E
-                } else {
-                    (Direction::Down, [1, i - 100]) // D
-                }
-            } else if j == 50 {
-                if i < 51 {
-                    (Direction::Right, [(51 - i) + 100, 1]) // E
-                } else if i < 101 {
-                    (Direction::Down, [101, i - 50]) // F
-                } else {
-                    panic!("Yet another please no");
-                }
-            } else {
-                panic!("Not here either")
-            }
-        }
-        Direction::Down => {
-            if i == 201 {
-                if (1..=50).contains(&j) {
-                    (Direction::Down, [1, j + 100]) // C
-                } else {
-                    panic!("AAAA");
-                }
-            } else if i == 151 {
-                if (51..=100).contains(&j) {
-                    (Direction::Left, [j + 100, 50]) // G
-                } else {
-                    panic!("Halp");
-                }
-            } else if (101..=150).contains(&j) {
-                (Direction::Left, [j - 50, 100]) // B
-            } else {
-                panic!("Last one!")
-            }
-        }
-    }
-
 }
