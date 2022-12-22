@@ -1,5 +1,5 @@
-Part 1 expected: 6032
-Part 2 expected: 
+Part 1 expected:
+Part 2 expected:
 
         ...#
         .#..

@@ -2,7 +2,10 @@ use ndarray::Array2;
 use crate::harness::input::RawInput;
 use crate::regex;
 
+// Extreme mess ahead. Don't expect quality.
+
 pub fn solve_part1(input: RawInput) -> usize {
+    todo!();
     let (board, moves) = parse(input);
     let mut state = State::new(board);
     for moove in moves {
@@ -13,8 +16,13 @@ pub fn solve_part1(input: RawInput) -> usize {
 }
 
 pub fn solve_part2(input: RawInput) -> usize {
-    input.as_str();
-    todo!()
+    let (board, moves) = parse(input);
+    let mut state = State::new(board);
+    for moove in moves {
+        state.apply_move(moove);
+    }
+    println!("position: {:?}, facing: {:?}", state.position, state.facing);
+    1000 * state.position[0] + 4 * state.position[1] + state.facing.score()
 }
 
 #[derive(Debug)]
@@ -37,7 +45,7 @@ impl State {
         match moove {
             Move::Forward(n) => {
               for _ in 0..n {
-                  self.move_foward_once();
+                  self.move_foward_once_part2();
               }
             },
             Move::TurnLeft => self.facing = self.facing.left(),
@@ -62,6 +70,19 @@ impl State {
                     position = self.facing.move_from(position);
                 }
                 if self.board[position] == Tile::Open { position } else { self.position }
+            }
+        };
+        self.position = position
+    }
+
+    fn move_foward_once_part2(&mut self) {
+        let mut position = self.facing.move_from(self.position);
+        position = match self.board[position] {
+            Tile::Open => position,
+            Tile::Blocked => self.position,
+            Tile::Warp => {
+                let (facing, position) = warp(self.facing, position);
+                if self.board[position] == Tile::Open { self.facing = facing; position } else { self.position }
             }
         };
         self.position = position
@@ -182,4 +203,143 @@ fn get_start_position(board: &Array2<Tile>) -> [usize; 2] {
         }
     }
     panic!("couldn't find start")
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Edge {
+    start: [usize; 2],
+    is_horizontal: bool,
+    destination_index: usize,
+    flip_while_warping: bool,
+}
+
+// fn get_edges() -> Vec<Edge> {
+//     vec![
+//         Edge { // D
+//             start: [0, 51],
+//             is_horizontal: true,
+//             destination_index: todo!(),
+//             flip_while_warping: false,
+//         },
+//         Edge { // C
+//             start: [0, 101],
+//             is_horizontal: true,
+//             destination_index: todo!(),
+//             flip_while_warping: false,
+//         },
+//         Edge { // F
+//             start: [100, 1],
+//             is_horizontal: true,
+//             destination_index: todo!(),
+//             flip_while_warping: false,
+//         },
+//         Edge { // B
+//             start: [51, 101],
+//             is_horizontal: true,
+//             destination_index: todo!(),
+//             flip_while_warping: false,
+//         },
+//         Edge { // G
+//             start: [151, 51],
+//             is_horizontal: true,
+//             destination_index: todo!(),
+//             flip_while_warping: false,
+//         },
+//         Edge { // C
+//             start: [201, 1],
+//             is_horizontal: true,
+//             destination_index: todo!(),
+//             flip_while_warping: false,
+//         },
+//     ]
+// }
+
+fn warp(facing: Direction, [i, j]: [usize; 2]) ->(Direction, [usize; 2]) {
+    match facing {
+        Direction::Right => {
+            if j == 151 {
+                if i < 51 {
+                    (Direction::Left, [(51 - i) + 100, 100]) // A
+                } else {
+                    panic!("Why here??");
+                }
+            } else if j == 101 {
+                if (51..=100).contains(&i) {
+                    (Direction::Up, [50, i + 50]) // B
+                } else if (101..=150).contains(&i) {
+                    (Direction::Left, [51 - (i - 100), 150]) // A
+                } else {
+                    panic!("Shouldn't be here");
+                }
+            } else if j == 51 {
+                if i > 150 {
+                    (Direction::Up, [150, i - 100]) // G
+                } else {
+                    panic!("whyyyy");
+                }
+            } else {
+                panic!("This is bad too")
+            }
+        }
+        Direction::Up => {
+            if i == 0 {
+                if j < 51 {
+                    panic!("How here?");
+                } else if j < 101 {
+                    (Direction::Right, [j + 100, 1]) // D
+                } else {
+                    (Direction::Up, [200, j - 100]) // C
+                }
+            } else if i == 100 {
+                if j < 51 {
+                    (Direction::Right, [j + 50, 51]) // F
+                } else {
+                    panic!("How here? 2");
+                }
+            } else {
+                panic!("Up in weird spot");
+            }
+        }
+        Direction::Left => {
+            if j == 0 {
+                if i < 101 {
+                    panic!("noooo");
+                } else if i < 151 {
+                    (Direction::Right, [51 - (i - 100), 51]) // E
+                } else {
+                    (Direction::Down, [1, i - 100]) // D
+                }
+            } else if j == 50 {
+                if i < 51 {
+                    (Direction::Right, [(51 - i) + 100, 1]) // E
+                } else if i < 101 {
+                    (Direction::Down, [101, i - 50]) // F
+                } else {
+                    panic!("Yet another please no");
+                }
+            } else {
+                panic!("Not here either")
+            }
+        }
+        Direction::Down => {
+            if i == 201 {
+                if (1..=50).contains(&j) {
+                    (Direction::Down, [1, j + 100]) // C
+                } else {
+                    panic!("AAAA");
+                }
+            } else if i == 151 {
+                if (51..=100).contains(&j) {
+                    (Direction::Left, [j + 100, 50]) // G
+                } else {
+                    panic!("Halp");
+                }
+            } else if (101..=150).contains(&j) {
+                (Direction::Left, [j - 50, 100]) // B
+            } else {
+                panic!("Last one!")
+            }
+        }
+    }
+
 }
