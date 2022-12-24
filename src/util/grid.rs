@@ -50,7 +50,7 @@ impl<T> IndexMut<[usize; 2]> for Grid<T> {
     }
 }
 
-impl<T> Grid<T> {
+impl<T: Default> Grid<T> {
     pub fn nrows(&self) -> usize {
         self.0.nrows()
     }
