@@ -1,6 +1,7 @@
 use crate::harness::input::RawInput;
 use crate::util::grid::Grid;
 use crate::util::search::bfs;
+use num::integer;
 use std::error;
 use std::str::FromStr;
 
@@ -47,7 +48,7 @@ fn get_shortest_time(
             let mut locs: Vec<_> = grid.orthogonal_neighbors(s.location).collect();
             locs.push(s.location);
             locs.into_iter()
-                .filter(|&ij| blizzards_at_times[time].is_clear(ij))
+                .filter(|&ij| blizzards_at_times[time % blizzards_at_times.len()].is_clear(ij))
                 .map(|ij| State { time, location: ij })
                 .collect::<Vec<State>>()
         },
@@ -150,7 +151,8 @@ impl Blizzards {
 fn load_blizzards_at_times(input: RawInput) -> Vec<Blizzards> {
     let mut blizzards: Blizzards = input.as_str().parse().unwrap();
     let mut blizzards_at_time: Vec<Blizzards> = vec![];
-    for _ in 0..1000 {
+    let cycle_length = integer::lcm(blizzards.nrows() - 2, blizzards.ncols() - 2);
+    for _ in 0..cycle_length {
         let next_blizzards = blizzards.next();
         blizzards_at_time.push(blizzards);
         blizzards = next_blizzards;
